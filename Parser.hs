@@ -29,13 +29,15 @@
  -  print("Blast off")
  -}
 
+module Parser where
+
+import Base
+
 import Data.List
 import Data.Char
 import Data.Maybe
 
-import System.IO
 
-import Debug.Trace
 
 -- Break a string into tokens
 tokenize :: String -> [String]
@@ -62,34 +64,48 @@ parseStr code =
 
 
 -- Generate an AST from tokens
-data Ast
-    = Expr String
-    | BinOp String Ast Ast
-    deriving Show
-
-
-makeAst :: Maybe (Ast, Int) -> [String] -> Maybe (Ast, Int) -- Syntax tree, amount of tokens swallowed
+makeAst :: Maybe (Ast, Int) -> [String] -> ParseResult (Ast, Int) -- Syntax tree, amount of tokens swallowed
 makeAst before tokens
-    | tokens == [] = Nothing
+    | tokens == [] = Err "Unexpected end of feed"
     | otherwise =
         case before of
             Just (ast, len) ->
                 let op = head tokens
                 in case makeAst Nothing $ tail tokens of
-                    Nothing -> Nothing
-                    Just (other, len_) -> Just ( BinOp op ast other, len + len_ + 1 )
-            Nothing ->
-                case makeBasicAst tokens of
-                    Nothing -> Nothing
-                    Just (before_, len) ->
-                        if len == length tokens
-                            then Just (before_, len)
-                            else makeAst (Just (before_, len)) $ drop len tokens
+                    Ok (other, len_) -> Ok ( BinOp op ast other, len + len_ + 1 )
+                    Err err ->
+                        case makeAst Nothing tokens of
+                            Ok (other, len_) -> Ok (FuncApplic ast other, len + len_)
+                            Err err_ -> Err err_
+            Nothing -> makeBlock tokens
 
-makeBasicAst :: [String] -> Maybe (Ast, Int)
+makeBlock :: [String] -> ParseResult (Ast, Int)
+makeBlock tokens =
+    case elemIndex ";" tokens of
+        Nothing ->
+            case makeBasicAst tokens of
+                Err err -> Err err
+                Ok (before_, len) ->
+                    if len == length tokens
+                        then Ok (before_, len)
+                        else makeAst (Just (before_, len)) $ drop len tokens
+        Just idx ->
+            let start = take idx tokens
+                end = drop (idx + 1) tokens
+            in 
+                if length end == 0 then makeAst Nothing start
+                else case (makeAst Nothing start, makeAst Nothing end) of
+                    (Ok (b1, len1), Ok (b2, len2)) ->
+                        case b2 of
+                            Block xs -> Ok (Block $ b1 : xs, len1 + len2 + 1)
+                            _ -> Ok (Block [b1, b2], len1 + len2 + 1)
+                    (Err e, _) -> Err e
+                    (_, Err e) -> Err e
+
+makeBasicAst :: [String] -> ParseResult (Ast, Int)
 makeBasicAst tokens
-    | tokens == [] = Nothing
-    | all isAlphaNum $ head tokens = Just ( Expr $ head tokens, 1 )
+    | tokens == [] = Err "Unexpected end of feed"
+    | isExpr $ head tokens = Ok ( Expr $ head tokens, 1 )
     | head tokens == "(" = -- Find closing paren
         let parens = map (\c -> if c == "(" then 1 else if c == ")" then -1 else 0) tokens
             runningSums = scanl1 (+) parens
@@ -97,19 +113,16 @@ makeBasicAst tokens
             in case parensEnd of
                 Just end ->
                     case makeAst Nothing $ take (end - 1) $ tail tokens of
-                        Just (codeBetween, len) -> if len == end - 1 then Just ( codeBetween, len + 2 ) else Nothing
-                        Nothing -> Nothing
-                Nothing -> Nothing
-    | otherwise = Nothing
+                        Err err -> Err err
+                        Ok (codeBetween, len) ->
+                            if len == end - 1 then Ok ( codeBetween, len + 2 ) else Err "Some error occured"
+                Nothing -> Err "Mismatched parens"
+    | otherwise = Err "Found nothing to parse"
 
+isExpr :: String -> Bool
+isExpr x
+    | all isAlphaNum x = True
+    | length x < 2 = False
+    | head x == '"' && last x == '"' = True
+    | otherwise = False
 
-main = do
-    putStr "> "
-    hFlush stdout
-    line <- getLine
-    let tokens = tokenize line
-    putStrLn "Tokens:"
-    putStrLn $ intercalate "\n" $ map ("    "++) tokens
-    putStrLn "\nAst:"
-    putStrLn $ show $ makeAst Nothing tokens
-    main
