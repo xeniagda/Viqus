@@ -15,5 +15,8 @@ main = do
         Ok (ast, _) ->
             let lines = makeCode ast
                 code = intercalate "\n" lines
-            in putStrLn $ code
+            in do 
+                hPutStrLn stderr $ "Ast:\n" ++ ( intercalate "\n" $ prettify ast )
+                hPutStrLn stderr "Code:\n\n"
+                putStrLn $ code
         Err err -> hPutStrLn stderr $ "Code couldn't compile! Error: " ++ err

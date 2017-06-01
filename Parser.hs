@@ -36,8 +36,10 @@ import Base
 import Data.List
 import Data.Char
 import Data.Maybe
+import Debug.Trace
 
-
+isBinOp :: String -> Bool
+isBinOp = not . all isAlphaNum
 
 -- Break a string into tokens
 tokenize :: String -> [String]
@@ -46,8 +48,7 @@ tokenize code =
     in if length stripped == 0
         then []
         else
-            let
-                maybeFirstToken = takeWhile isAlphaNum stripped
+            let maybeFirstToken = takeWhile isAlphaNum stripped
                 firstToken =
                     if head stripped == '"'
                         then parseStr stripped
@@ -71,12 +72,17 @@ makeAst before tokens
         case before of
             Just (ast, len) ->
                 let op = head tokens
-                in case makeAst Nothing $ tail tokens of
-                    Ok (other, len_) -> Ok ( BinOp op ast other, len + len_ + 1 )
-                    Err err ->
-                        case makeAst Nothing tokens of
+                in if isBinOp op
+                    then case makeAst Nothing $ tail tokens of
+                        Ok (other, len_) -> Ok ( BinOp op ast other, len + len_ + 1 ) -- Binary operation
+                        Err err ->
+                            case makeAst Nothing tokens of
+                                Ok (other, len_) -> Ok (FuncApplic ast other, len + len_)
+                                Err err_ -> Err err_
+                    else case makeAst Nothing tokens of
                             Ok (other, len_) -> Ok (FuncApplic ast other, len + len_)
                             Err err_ -> Err err_
+
             Nothing -> makeBlock tokens
 
 makeBlock :: [String] -> ParseResult (Ast, Int)
@@ -117,6 +123,17 @@ makeBasicAst tokens
                         Ok (codeBetween, len) ->
                             if len == end - 1 then Ok ( codeBetween, len + 2 ) else Err "Some error occured"
                 Nothing -> Err "Mismatched parens"
+    | head tokens == "{" = -- Find closing paren
+        let parens = map (\c -> if c == "{" then 1 else if c == "}" then -1 else 0) tokens
+            runningSums = scanl1 (+) parens
+            parensEnd = findIndex (==0) runningSums
+            in case parensEnd of
+                Just end ->
+                    case makeAst Nothing $ take (end - 1) $ tail tokens of
+                        Err err -> Err err
+                        Ok (codeBetween, len) ->
+                            if len == end - 1 then Ok ( Block [codeBetween], len + 2 ) else Err "Some error occured"
+                Nothing -> Err "Mismatched parens"
     | otherwise = Err "Found nothing to parse"
 
 isExpr :: String -> Bool
@@ -125,4 +142,18 @@ isExpr x
     | length x < 2 = False
     | head x == '"' && last x == '"' = True
     | otherwise = False
+
+prettify :: Ast -> [String]
+prettify ast =
+    let (tx, tok, rst) =
+            case ast of
+                Expr e         -> ("Ex", e, [])
+                BinOp op e1 e2 -> ("Bn", show op, [e1, e2])
+                FuncApplic f a -> ("Fn", "", [f, a])
+                Block as       -> ("Bl", "", as)
+    in (tx ++ " " ++ tok)
+     : concatMap (\lst ->
+        let lines = prettify lst
+        in ("|-" ++ head lines) : (map ("| " ++) $ tail lines))
+       rst
 
