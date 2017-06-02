@@ -5,16 +5,21 @@ module Generator where
 
 import Base
 import Parser
+import ActionTree
 
+paren :: String -> String
+paren x = "(" ++ x ++ ")"
 
-indent :: [String] -> [String] -- Indents all the lines by one space
-indent = map ("    " ++)
-
-makeCode :: Ast -> [String] -- Ast to list of lines
+makeCode :: AT -> [String] -- Ast to list of lines
 makeCode x =
     case x of
-        Expr x -> [x]
-        BinOp op param1 param2 -> ["(" ++ (head $ makeCode param1) ++ ")" ++ op ++ "(" ++ (head $ makeCode param2) ++ ")"]
-        FuncApplic fn param -> [(head $ makeCode fn) ++ "(" ++ (head $ makeCode param) ++ ")"]
-        Block [x] -> makeCode x
-        Block (x:xs) -> makeCode x ++ makeCode (Block xs)
+        ATAssign var expr -> [var ++ "=" ++ paren (makeExpr expr)]
+        ATExpr_ expr -> [makeExpr expr]
+        ATBlock xs -> concatMap makeCode xs
+
+makeExpr :: ATExpr -> String -- Makes ATExpr into actual code. Should parenthesise expressions automaticallyexpressions automatically
+makeExpr x =
+    case x of
+        AEExpr ex -> ex
+        AEBinOp op x y -> paren $ makeExpr x ++ op ++ makeExpr y
+        AEFuncApplic f x -> (makeExpr f) ++ (paren $ makeExpr x)
