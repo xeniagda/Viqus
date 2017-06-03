@@ -32,6 +32,21 @@ prMap2 f a b =
         (Err e, _) -> Err e
         (_, Err e) -> Err e
 
+prCollect :: [ParseResult x] -> ParseResult [x]
+prCollect [] = Ok []
+prCollect (x:xs) =
+    case (x, prCollect xs) of
+        (Ok x_, Ok xs_) -> Ok $ x_ : xs_
+        (Err e, _) -> Err e
+        (_, Err e) -> Err e
+
 indent :: [String] -> [String] -- Indents all the lines by one space
 indent = map ("    " ++)
+
+-- Variant of map that passes each element's index as a second argument to f. Stolen from https://stackoverflow.com/a/16192050/1753929
+mapInd :: (a -> Int -> b) -> [a] -> [b]
+mapInd f l = zipWith f l [0..]
+
+mapIndMaybe :: (a -> Int -> Maybe b) -> [a] -> [b]
+mapIndMaybe f l = mapMaybe (uncurry f) (zip l [0..])
 

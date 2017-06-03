@@ -12,7 +12,7 @@ main = do
     let code = foldr' (:) [] codeInf
         tokens = tokenize code
     hPutStrLn stderr $ show tokens
-    let ast_ = prMap fst $ makeAst Nothing tokens
+    let ast_ = makeAst tokens
         at_ = pr2Map makeAT ast_
         code_ = prMap makeCode at_
     case ( ast_, at_, code_ ) of

@@ -38,6 +38,8 @@ import Data.Char
 import Data.Maybe
 import Debug.Trace
 
+orderOfOperations = [["="], ["+", "-"], ["*", "/"], ["^"]]
+
 data TokenType
     = TSymbol
     | TOpenParen
@@ -102,69 +104,39 @@ data Ast
 
 
 -- Generate an AST from tokens
-makeAst :: Maybe (Ast, Int) -> [String] -> ParseResult (Ast, Int) -- Syntax tree, amount of tokens swallowed
-makeAst before tokens
-    | tokens == [] = Err "Unexpected end of feed"
-    | otherwise =
-        case before of
-            Just (ast, len) ->
-                let op = head tokens
-                in if getType op == TBinOp
-                    then case makeAst Nothing $ tail tokens of
-                        Ok (other, len_) -> Ok ( BinOp op ast other, len + len_ + 1 ) -- Binary operation
-                        Err err ->
-                            case makeAst Nothing tokens of
-                                Ok (other, len_) -> Ok (FuncApplic ast other, len + len_)
-                                Err err_ -> Err err_
-                    else case makeAst Nothing tokens of
-                            Ok (other, len_) -> Ok (FuncApplic ast other, len + len_)
-                            Err err_ -> Err err_
-            Nothing -> makeBlock tokens
-
-makeBlock :: [String] -> ParseResult (Ast, Int)
-makeBlock tokens =
-    case elemIndex ";" tokens of
-        Nothing ->
-            case makeBasicAst tokens of
-                Err err -> Err err
-                Ok (before_, len) ->
-                    if len == length tokens
-                        then Ok (before_, len)
-                        else makeAst (Just (before_, len)) $ drop len tokens
-        Just idx ->
-            let start = take idx tokens
-                end = drop (idx + 1) tokens
-            in
-                if length end == 0 then makeAst Nothing start
-                else case (makeAst Nothing start, makeAst Nothing end) of
-                    (Ok (b1, len1), Ok (b2, len2)) ->
-                        case b2 of
-                            Block xs -> Ok (Block $ b1 : xs, len1 + len2 + 1)
-                            _ -> Ok (Block [b1, b2], len1 + len2 + 1)
-                    _ ->
-                        case makeBasicAst tokens of
-                            Err err -> Err err
-                            Ok (before_, len) ->
-                                if len == length tokens
-                                    then Ok (before_, len)
-                                    else makeAst (Just (before_, len)) $ drop len tokens
-
-makeBasicAst :: [String] -> ParseResult (Ast, Int)
-makeBasicAst tokens
-    | tokens == [] = Err "Unexpected end of feed"
-    | isExpr $ head tokens = Ok ( Expr $ head tokens, 1 )
-    | getType (head tokens) == TOpenParen = -- Find closing paren
-        let parens = map (\c -> if c == head tokens then 1 else if c == getOtherParen (head tokens) then -1 else 0) tokens
-            runningSums = scanl1 (+) parens
-            parensEnd = findIndex (==0) runningSums
-            in case parensEnd of
-                Just end ->
-                    case makeAst Nothing $ take (end - 1) $ tail tokens of
-                        Err err -> Err err
-                        Ok (codeBetween, len) ->
-                            if len == end - 1 then Ok ( codeBetween, len + 2 ) else Err "Some error occured"
-                Nothing -> Err "Mismatched parens"
-    | otherwise = Err "Found nothing to parse"
+makeAst :: [String] -> ParseResult Ast -- Syntax tree, amount of tokens swallowed
+makeAst tokens =
+    let parens = map (\c -> if getType c == TOpenParen then 1 else if getType c == TCloseParen then -1 else 0) tokens
+        running = scanl1 (+) parens
+        paired = zip tokens running
+        operationsIdx = -- Contains the indexed of the operations in order
+            concatMap
+                (reverse . sort . concatMap (\op ->
+                    mapIndMaybe (\(ch, depth) idx -> if ch == op && depth == 0 then Just idx else Nothing) paired
+                ))
+                orderOfOperations
+    in case listToMaybe operationsIdx of
+        Just idx -> 
+            let x = makeAst $ take idx tokens
+                y = makeAst $ drop (idx + 1) tokens
+                f = tokens !! idx
+            in prMap2 (BinOp f) x y
+        Nothing -> 
+            if (elemIndex 0 $ init running) == Nothing && length tokens > 2 
+                then makeAst (tail $ init tokens)
+                else if isExpr $ head tokens
+                    then if length tokens == 1
+                        then Ok $ Expr $ head tokens
+                        else -- Functions
+                            let args = (map (1+) $ elemIndices 0 $ init running)
+                                ranges = zip (0 : args) (args ++ [length tokens])
+                                fns = map (\(s, e) -> drop s $ take e tokens) ranges
+                                parsed = prCollect $ map makeAst fns
+                            in case parsed of
+                                Ok args -> Ok $ foldl1 (FuncApplic) args
+                                Err e -> Err e
+                    else Err $ "Welp, nothing: " ++ (show tokens)
+code = ["1", "+", "(", "7", "/", "3", ")", "/", "1", "-", "f", "(", "x", "+", "1", ")"]
 
 isExpr :: String -> Bool
 isExpr x
