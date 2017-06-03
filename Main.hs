@@ -16,7 +16,8 @@ run args = do
     codeInf <- hGetContents stdin
     let code = foldr' (:) [] codeInf
         tokens = tokenize code
-    debug $ "Tokens:   " ++ intercalate " " tokens
+
+    debug $ intercalate " " tokens ++ " <-- Tokens"
     let ast_ = makeAst tokens
         at_ = pr2Map makeAT ast_
         code_ = prMap makeCode at_

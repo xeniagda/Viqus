@@ -46,11 +46,12 @@ data TokenType
     | TCloseParen
     | TBinOp
     | TSpace
-    deriving Eq
+    deriving (Eq, Show)
+
 
 getType :: String -> TokenType
 getType x
-    | all isAlphaNum x = TSymbol
+    | isExpr x = TSymbol
     | all isSpace x = TSpace
     | elem (head x) "([{"= TOpenParen
     | elem (head x) ")]}"= TCloseParen
