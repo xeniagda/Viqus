@@ -15,6 +15,8 @@ makeCode x =
     case x of
         ATAssign var expr -> [var ++ "=" ++ paren (makeExpr expr)]
         ATExpr_ expr -> [makeExpr expr]
+        ATWhile cond code -> ("while " ++ makeExpr cond ++ ":") : indent (makeCode code)
+        ATIf cond code -> ("if " ++ makeExpr cond ++ ":") : indent (makeCode code)
         ATBlock xs -> concatMap makeCode xs
 
 makeExpr :: ATExpr -> String -- Makes ATExpr into actual code. Should parenthesise expressions automaticallyexpressions automatically

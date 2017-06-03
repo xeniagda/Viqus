@@ -38,7 +38,7 @@ import Data.Char
 import Data.Maybe
 import Debug.Trace
 
-orderOfOperations = [[";"], ["="], ["+", "-"], ["*", "/"], ["^"]]
+orderOfOperations = [[";"], ["="], ["==", "<", ">"], ["+", "-"], ["*", "/", "%"], ["^"]]
 
 data TokenType
     = TSymbol
@@ -141,7 +141,7 @@ makeAst tokens =
                             else Err $ "Welp, nothing: " ++ (show tokens)
         seps -> let seps_ = sort seps
                     ranges = zip (map (1+) (-1 : seps_)) (seps_ ++ [length tokens])
-                    funcs = map (\(s, e) -> drop s $ take e tokens) ranges
+                    funcs = filter ((> 0) . length) $ map (\(s, e) -> drop s $ take e tokens) ranges
                     parsed = map makeAst funcs
                 in case prCollect parsed of
                     Ok blk -> Ok $ Block blk

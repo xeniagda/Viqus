@@ -8,6 +8,8 @@ import Data.Maybe
 data AT -- Action tree
     = ATAssign String ATExpr
     | ATExpr_ ATExpr
+    | ATWhile ATExpr AT
+    | ATIf ATExpr AT
     | ATBlock [AT]
     deriving Show
 
@@ -51,4 +53,8 @@ makeAT tree =
                         Err e -> Err e
                         _ -> Err "Something weird happened"
                 Nothing -> Ok $ ATBlock nonErrors
+        FuncApplic (FuncApplic (Expr "while") cond) code ->
+            prMap2 ATWhile (makeATExpr cond) (makeAT code)
+        FuncApplic (FuncApplic (Expr "if") cond) code ->
+            prMap2 ATIf (makeATExpr cond) (makeAT code)
         _ -> prMap (ATExpr_) (makeATExpr tree)
