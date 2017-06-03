@@ -38,7 +38,7 @@ import Data.Char
 import Data.Maybe
 import Debug.Trace
 
-orderOfOperations = [["="], ["+", "-"], ["*", "/"], ["^"]]
+orderOfOperations = [[";"], ["="], ["+", "-"], ["*", "/"], ["^"]]
 
 data TokenType
     = TSymbol
@@ -104,38 +104,48 @@ data Ast
 
 
 -- Generate an AST from tokens
-makeAst :: [String] -> ParseResult Ast -- Syntax tree, amount of tokens swallowed
+makeAst :: [String] -> ParseResult Ast
 makeAst tokens =
     let parens = map (\c -> if getType c == TOpenParen then 1 else if getType c == TCloseParen then -1 else 0) tokens
         running = scanl1 (+) parens
         paired = zip tokens running
-        operationsIdx = -- Contains the indexed of the operations in order
-            concatMap
+        (semis : ops) = -- Contains the indexed of the operations in order
+            map
                 (reverse . sort . concatMap (\op ->
                     mapIndMaybe (\(ch, depth) idx -> if ch == op && depth == 0 then Just idx else Nothing) paired
                 ))
                 orderOfOperations
-    in case listToMaybe operationsIdx of
-        Just idx -> 
-            let x = makeAst $ take idx tokens
-                y = makeAst $ drop (idx + 1) tokens
-                f = tokens !! idx
-            in prMap2 (BinOp f) x y
-        Nothing -> 
-            if (elemIndex 0 $ init running) == Nothing && length tokens > 2 
-                then makeAst (tail $ init tokens)
-                else if isExpr $ head tokens
-                    then if length tokens == 1
-                        then Ok $ Expr $ head tokens
-                        else -- Functions
-                            let args = (map (1+) $ elemIndices 0 $ init running)
-                                ranges = zip (0 : args) (args ++ [length tokens])
-                                fns = map (\(s, e) -> drop s $ take e tokens) ranges
-                                parsed = prCollect $ map makeAst fns
-                            in case parsed of
-                                Ok args -> Ok $ foldl1 (FuncApplic) args
-                                Err e -> Err e
-                    else Err $ "Welp, nothing: " ++ (show tokens)
+        operationsIdx = concat ops
+    in case semis of
+        [] -> case listToMaybe operationsIdx of
+                Just idx ->
+                    let x = makeAst $ take idx tokens
+                        y = makeAst $ drop (idx + 1) tokens
+                        f = tokens !! idx
+                    in prMap2 (BinOp f) x y
+                Nothing ->
+                    if length tokens > 2 && (elemIndex 0 $ init running) == Nothing
+                        then makeAst (tail $ init tokens)
+                        else if length tokens > 0 && (isExpr $ head tokens)
+                            then if length tokens == 1
+                                then Ok $ Expr $ head tokens
+                                else -- Functions
+                                    let args = (map (1+) $ elemIndices 0 $ init running)
+                                        ranges = zip (0 : args) (args ++ [length tokens])
+                                        fns = map (\(s, e) -> drop s $ take e tokens) ranges
+                                        parsed = prCollect $ map makeAst fns
+                                    in case parsed of
+                                        Ok args -> Ok $ foldl1 (FuncApplic) args
+                                        Err e -> Err e
+                            else Err $ "Welp, nothing: " ++ (show tokens)
+        seps -> let seps_ = sort seps
+                    ranges = zip (map (1+) (-1 : seps_)) (seps_ ++ [length tokens])
+                    funcs = map (\(s, e) -> drop s $ take e tokens) ranges
+                    parsed = map makeAst funcs
+                in case prCollect parsed of
+                    Ok blk -> Ok $ Block blk
+                    Err e -> Err e
+
 code = ["1", "+", "(", "7", "/", "3", ")", "/", "1", "-", "f", "(", "x", "+", "1", ")"]
 
 isExpr :: String -> Bool
