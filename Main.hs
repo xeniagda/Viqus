@@ -21,10 +21,17 @@ run args = do
     let ast_ = makeAst tokens
         at_ = pr2Map makeAT ast_
         code_ = prMap makeCode at_
-    case ( ast_, at_, code_ ) of
-        (Ok ast, Ok at, Ok code) ->
-            do 
+
+    case ast_ of
+        Ok ast -> do 
+                debug $ "Ast:\n" ++ show ast
                 debug $ "Ast:\n" ++ ( intercalate "\n" $ prettify ast )
-                debug $ "AT: " ++ show at
-                putStrLn $ intercalate "\n" code
-        (_, _, Err err) -> hPutStrLn stderr $ "Code couldn't compile! Error: " ++ err
+        Err e -> debug e
+
+    case at_ of
+        Ok at -> debug $ show at
+        Err e -> debug e
+
+    case code_ of
+        Ok code -> putStrLn $ intercalate "\n" code
+        Err err -> hPutStrLn stderr $ "Code couldn't compile! Error: " ++ err
