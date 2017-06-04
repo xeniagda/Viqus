@@ -38,7 +38,7 @@ import Data.Char
 import Data.Maybe
 import Debug.Trace
 
-orderOfOperations = [[";"], ["=", ":"], ["==", "<", ">"], ["+", "-"], ["*", "/", "%"], ["^"]]
+orderOfOperations = [["=", ":"], ["==", "<", ">"], ["+", "-"], ["*", "/", "%"], ["^"], ["$"]]
 
 data TokenType
     = TSymbol
@@ -53,15 +53,15 @@ getType :: String -> TokenType
 getType x
     | isExpr x = TSymbol
     | all isSpace x = TSpace
-    | elem (head x) "([{"= TOpenParen
-    | elem (head x) ")]}"= TCloseParen
+    | elem (head x) "([{" = TOpenParen
+    | elem (head x) ")]}" = TCloseParen
     | otherwise = TBinOp
 
 getOtherParen :: String -> String
 getOtherParen c
     | c == "(" = ")"
-    | c == "{" = "}"
     | c == "[" = "]"
+    | c == "{" = "}"
     | otherwise = c
 
 -- Break a string into tokens
@@ -100,6 +100,7 @@ data Ast
     = Expr String
     | BinOp String Ast Ast
     | FuncApplic Ast [Ast]
+    | List [Ast]
     | Block [Ast]
     deriving Show
 
@@ -110,15 +111,11 @@ makeAst tokens =
     let parens = map (\c -> if getType c == TOpenParen then 1 else if getType c == TCloseParen then -1 else 0) tokens
         running = scanl1 (+) parens
         paired = zip tokens running
-        (semis : ops) = -- Contains the indexed of the operations in order
-            map
-                (reverse . sort . concatMap (\op ->
-                    mapIndMaybe (\(ch, depth) idx -> if ch == op && depth == 0 then Just idx else Nothing) paired
-                ))
-                orderOfOperations
+        (semis : commas : ops) = -- Contains the indexed of the operations in order
+            map (parseOps tokens) $ [[";"], [","]] ++ orderOfOperations
         operationsIdx = concat ops
-    in case semis of
-        [] -> case listToMaybe operationsIdx of
+    in case (semis, commas) of
+        ([], []) -> case listToMaybe operationsIdx of
                 Just idx ->
                     let x = makeAst $ take idx tokens
                         y = makeAst $ drop (idx + 1) tokens
@@ -139,13 +136,31 @@ makeAst tokens =
                                         Ok (f:args) -> Ok $ FuncApplic f args
                                         Err e -> Err e
                             else Err $ "Welp, nothing: " ++ (show tokens)
-        seps -> let seps_ = sort seps
+        ([], commas) ->
+                let commas_ = sort commas
+                    ranges = zip (map (1+) (-1 : commas_)) (commas_ ++ [length tokens])
+                    funcs = map (\(s, e) -> drop s $ take e tokens) ranges
+                    parsed = map makeAst funcs
+                in case prCollect parsed of
+                    Ok blk -> Ok $ List blk
+                    Err e -> Err e
+        (seps, _) -> 
+                let seps_ = sort seps
                     ranges = zip (map (1+) (-1 : seps_)) (seps_ ++ [length tokens])
                     funcs = filter ((> 0) . length) $ map (\(s, e) -> drop s $ take e tokens) ranges
                     parsed = map makeAst funcs
                 in case prCollect parsed of
                     Ok blk -> Ok $ Block blk
                     Err e -> Err e
+parseOps :: [String] -> [String] -> [Int]
+parseOps tokens ops =
+    let parens = map (\c -> if getType c == TOpenParen then 1 else if getType c == TCloseParen then -1 else 0) tokens
+        running = scanl1 (+) parens
+        paired = zip tokens running
+    in 
+        (reverse . sort . concatMap (\op ->
+            mapIndMaybe (\(ch, depth) idx -> if ch == op && depth == 0 then Just idx else Nothing) paired
+        )) ops
 
 code = ["1", "+", "(", "7", "/", "3", ")", "/", "1", "-", "f", "(", "x", "+", "1", ")"]
 
@@ -163,6 +178,7 @@ prettify ast =
                 Expr e         -> ("Ex", e, [])
                 BinOp op e1 e2 -> ("Bn", show op, [e1, e2])
                 FuncApplic f a -> ("Fn", "", f : a)
+                List items     -> ("[]", "", items)
                 Block as       -> ("Bl", "", as)
     in case rst of
         [] -> [tx ++ " " ++ tok]
@@ -179,6 +195,7 @@ unParse :: Ast -> String
 unParse tree =
     case tree of
         Expr st -> st
-        BinOp f x y -> paren (unParse x ++ f ++ unParse y)
+        BinOp f x y -> paren $ unParse x ++ f ++ unParse y
         FuncApplic f args -> unParse f ++ " " ++ (intercalate " " $ map unParse args)
-        Block lines -> intercalate "; " $ map unParse lines
+        List items -> paren $ intercalate ", " $ map unParse items
+        Block lines -> "{" ++ (intercalate "; " $ map unParse lines) ++ "}"

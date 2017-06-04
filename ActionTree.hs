@@ -24,6 +24,7 @@ data AT -- Action tree
 data ATExpr
     = AEExpr String
     | AEVar String
+    | AEList [ATExpr]
     | AEBinOp String ATExpr ATExpr
     | AEFuncApplic ATExpr [ATExpr]
     deriving Show
@@ -47,7 +48,13 @@ makeATExpr tree =
             if isVar ex
                 then Ok $ AEVar $ localFlag ++ ex
                 else Ok $ AEExpr ex
+        BinOp "$" x_ y_ ->
+            case (makeATExpr x_, makeATExpr y_) of
+                (Ok x, Ok y) -> Ok $ AEFuncApplic x [y]
+                (Err e, _) -> Err e
+                (_, Err e) -> Err e
         BinOp st x y -> prMap2 (AEBinOp st) (makeATExpr x) (makeATExpr y)
+        List items -> prMap AEList $ prCollect $ map makeATExpr items
         FuncApplic f args -> prMap2 AEFuncApplic (makeATExpr f) (prCollect $ map makeATExpr args)
         _ -> Err $ "Not an expression: `" ++ unParse tree ++ "` " ++ paren (show tree)
 
@@ -69,14 +76,14 @@ makeAT tree =
                         (Ok (AEVar f), Ok args) -> prMap (ATFuncDef f args) $ makeAT y_
                 _ -> Err $ "Not a variable: `" ++ unParse x_ ++ "` " ++ paren (show x_)
         BinOp "=" x_ y_ ->
-            case x_ of
-                Expr x ->
+            case makeATExpr x_ of
+                Ok (AEVar x) ->
                     prMap (ATAssign x) $ makeATExpr y_
-                FuncApplic (Expr f) args_ ->
+                Ok (AEFuncApplic (AEVar f) args_) ->
                     let parsed = map (\x_ ->
-                                case makeATExpr x_ of
-                                    Ok (AEVar x) -> Ok x
-                                    _ -> Err $ unParse x_ ++ " is not a variable"
+                                case x_ of
+                                    AEVar x -> Ok x
+                                    _ -> Err $ show x_ ++ " is not a variable"
                                 ) args_
                     in case prCollect parsed of
                         Err e -> Err e
@@ -123,6 +130,7 @@ prettifyATExpr ast =
             case ast of
                 AEExpr e         -> (" " ++ e, [])
                 AEVar v          -> ("Var " ++ v, [])
+                AEList items     -> ("[]", map prettifyATExpr items)
                 AEBinOp op x y   -> (" " ++ op, [prettifyATExpr x, prettifyATExpr y])
                 AEFuncApplic f x -> ("Fn", prettifyATExpr f : map prettifyATExpr x)
     in case rst of

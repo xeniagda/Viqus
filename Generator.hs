@@ -7,10 +7,16 @@ import Base
 import Parser
 import ActionTree
 
+import Data.List
+
 defaultCode :: [String]
 defaultCode =
     makeCode $ ATBlock
     [ ATAssign (localFlag ++ "print") (AEExpr "print")
+    , ATAssign (localFlag ++ "int") (AEExpr "int")
+    , ATAssign (localFlag ++ "str") (AEExpr "str")
+    , ATAssign (localFlag ++ "input") (AEExpr "input")
+    , ATAssign (localFlag ++ "at") (AEExpr "lambda x:lambda y:x[y]")
     ]
 
 makeCode :: AT -> [String] -- Ast to list of lines
@@ -45,6 +51,7 @@ makeExpr x =
     case x of
         AEExpr ex -> ex
         AEVar v -> v
+        AEList items -> "[" ++ intercalate "," (map makeExpr items) ++ "]"
         AEBinOp op x y -> paren $ makeExpr x ++ op ++ makeExpr y
         AEFuncApplic f [] -> makeExpr f
         AEFuncApplic f args -> (makeExpr $ AEFuncApplic f $ init args) ++ paren (makeExpr $ last args)

@@ -21,7 +21,6 @@ run args = do
     let code = foldr' (:) [] codeInf
         tokens = tokenize code
 
-    debug 1 $ "Read input"
     debug 3 $ intercalate " " tokens ++ " <-- Tokens"
 
     case makeAst tokens of
