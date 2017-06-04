@@ -1,34 +1,3 @@
--- A simple programming language that compiles to Python 3
-
-{- Example prorgam
- -
- -  x = 0;
- -  while (x < 20) {
- -      print(toString(x + 10));
- -  }
- -  print("Blast off!");
- -
- - Tokens:
- -  [x, =, 0, ; while, (, x, <, 20, ), {, print, (, toString, (, x, +, 10, ), ), }, ;, print, (, "Blast off!", ), ;]
- -
- - AST:
- -
- - [ Assign (Var "x") Expr "3"
- - , While (BinFunc ("<", Var "x", Expr "20")
- -         , [ FuncCall ("print", FuncCall ("toString", BinFunc ("+", Var "x", Expr "20")))
- -           ]
- -         )
- - , FuncCall ("print", Expr "\"Blast off!\"")
- - ]
- -
- - Generated Python code:
- -
- -  x = (3)
- -  while ((x)<(3)):
- -      print(toString((x)+(10)))
- -  print("Blast off")
- -}
-
 module Parser where
 
 import Base
@@ -57,15 +26,7 @@ getType x
     | elem (head x) ")]}" = TCloseParen
     | otherwise = TBinOp
 
-getOtherParen :: String -> String
-getOtherParen c
-    | c == "(" = ")"
-    | c == "[" = "]"
-    | c == "{" = "}"
-    | otherwise = c
-
 -- Break a string into tokens
-
 tokenize :: String -> [String]
 tokenize code =
     let tok = partTokenize code
@@ -74,7 +35,7 @@ tokenize code =
         noSpaces = filter ((/= TSpace) . getType) binOpGrouped
     in noSpaces
 
-partTokenize :: String -> [String]
+partTokenize :: String -> [String] -- Tokenizes without respecting grouped binary operators such as `==`
 partTokenize code =
     let stripped = dropWhile isSpace code
     in if length stripped == 0
@@ -93,7 +54,7 @@ partTokenize code =
 
 parseStr :: String -> String
 parseStr code =
-    let inString = takeWhile ((/=)'"') $ tail code
+    let inString = takeWhile (/='"') $ tail code
     in "\"" ++ inString ++ "\""
 
 data Ast
@@ -136,6 +97,7 @@ makeAst tokens =
                                         Ok (f:args) -> Ok $ FuncApplic f args
                                         Err e -> Err e
                             else Err $ "Welp, nothing: " ++ (show tokens)
+
         ([], commas) ->
                 let commas_ = sort commas
                     ranges = zip (map (1+) (-1 : commas_)) (commas_ ++ [length tokens])
@@ -144,6 +106,7 @@ makeAst tokens =
                 in case prCollect parsed of
                     Ok blk -> Ok $ List blk
                     Err e -> Err e
+
         (seps, _) -> 
                 let seps_ = sort seps
                     ranges = zip (map (1+) (-1 : seps_)) (seps_ ++ [length tokens])
@@ -152,6 +115,7 @@ makeAst tokens =
                 in case prCollect parsed of
                     Ok blk -> Ok $ Block blk
                     Err e -> Err e
+
 parseOps :: [String] -> [String] -> [Int]
 parseOps tokens ops =
     let parens = map (\c -> if getType c == TOpenParen then 1 else if getType c == TCloseParen then -1 else 0) tokens
@@ -162,14 +126,13 @@ parseOps tokens ops =
             mapIndMaybe (\(ch, depth) idx -> if ch == op && depth == 0 then Just idx else Nothing) paired
         )) ops
 
-code = ["1", "+", "(", "7", "/", "3", ")", "/", "1", "-", "f", "(", "x", "+", "1", ")"]
-
 isExpr :: String -> Bool
 isExpr x
     | all isAlphaNum x = True
     | length x < 2 = False
     | head x == '"' && last x == '"' = True
     | otherwise = False
+
 
 prettify :: Ast -> [String]
 prettify ast =
@@ -183,14 +146,15 @@ prettify ast =
     in case rst of
         [] -> [tx ++ " " ++ tok]
         rst -> 
-            (tx ++ " " ++ tok)
-          : concatMap (\lst ->
-                let (first : rest) = prettify lst
-                in ("|-" ++ first) : (map ("| " ++) rest)
-            ) (init rst)
-         ++ let (first : rest) = prettify $ last rst
-            in ("|-" ++ first) : (map ("  " ++) rest)
+            (tx ++ " " ++ tok) : 
+                concatMap (\lst ->
+                    let (first : rest) = prettify lst
+                    in ("|-" ++ first) : (map ("| " ++) rest)
+                ) (init rst) ++
+                    let (first : rest) = prettify $ last rst
+                    in ("|-" ++ first) : (map ("  " ++) rest)
 
+-- Try to make an Ast back into actual code
 unParse :: Ast -> String
 unParse tree =
     case tree of

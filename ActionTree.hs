@@ -7,7 +7,8 @@ import Data.Maybe
 import Data.Char
 
 localFlag :: String
-localFlag = "L_"
+localFlag = "L_" -- Placed in front of all variables and functions
+
 
 data AT -- Action tree
     = ATAssign String ATExpr
@@ -48,15 +49,20 @@ makeATExpr tree =
             if isVar ex
                 then Ok $ AEVar $ localFlag ++ ex
                 else Ok $ AEExpr ex
+
         BinOp "$" x_ y_ ->
             case (makeATExpr x_, makeATExpr y_) of
                 (Ok x, Ok y) -> Ok $ AEFuncApplic x [y]
                 (Err e, _) -> Err e
                 (_, Err e) -> Err e
+
         BinOp st x y -> prMap2 (AEBinOp st) (makeATExpr x) (makeATExpr y)
+
         List items -> prMap AEList $ prCollect $ map makeATExpr items
+
         FuncApplic f args -> prMap2 AEFuncApplic (makeATExpr f) (prCollect $ map makeATExpr args)
-        _ -> Err $ "Not an expression: `" ++ unParse tree ++ "` " ++ paren (show tree)
+
+        _ -> Err $ "Not an expression: `" ++ unParse tree ++ "`"
 
 -- Convert Ast's to AT's
 makeAT :: Ast -> ParseResult AT
@@ -74,11 +80,14 @@ makeAT tree =
                         (Err e, _) -> Err e
                         (_, Err e) -> Err e
                         (Ok (AEVar f), Ok args) -> prMap (ATFuncDef f args) $ makeAT y_
+
                 _ -> Err $ "Not a variable: `" ++ unParse x_ ++ "` " ++ paren (show x_)
+
         BinOp "=" x_ y_ ->
             case makeATExpr x_ of
                 Ok (AEVar x) ->
                     prMap (ATAssign x) $ makeATExpr y_
+
                 Ok (AEFuncApplic (AEVar f) args_) ->
                     let parsed = map (\x_ ->
                                 case x_ of
@@ -88,20 +97,25 @@ makeAT tree =
                     in case prCollect parsed of
                         Err e -> Err e
                         Ok args -> prMap (ATSimpleFuncDef f args) $ makeATExpr y_
+
                 _ -> Err $ "Not a variable: `" ++ unParse x_ ++ "` " ++ paren (show x_)
+
         FuncApplic (Expr "while") [cond, code] ->
             prMap2 ATWhile (makeATExpr cond) $ makeAT code
+
         FuncApplic (Expr "if") [cond, code] ->
             prMap2 ATIf (makeATExpr cond) $ makeAT code
+
         FuncApplic (Expr "return") [exp] ->
             prMap ATReturn $ makeATExpr exp
+
         Block asts ->
             prMap ATBlock $ prCollect $ map makeAT asts
+
         _ -> prMap (ATExpr_) (makeATExpr tree)
 
 
 -- Prettifiers:
-
 prettifyAT :: AT -> [String]
 prettifyAT ast =
     let (tx, rst) =
@@ -121,8 +135,8 @@ prettifyAT ast =
                 let (first : rest) = lst
                 in ("|-" ++ first) : (map ("| " ++) rest)
             ) (init rst)
-         ++ let (first : rest) = last rst
-            in ("|-" ++ first) : (map ("  " ++) rest)
+             ++ let (first : rest) = last rst
+                in ("|-" ++ first) : (map ("  " ++) rest)
 
 prettifyATExpr :: ATExpr -> [String]
 prettifyATExpr ast =
@@ -140,6 +154,7 @@ prettifyATExpr ast =
                 let (first : rest) = lst
                 in ("|-" ++ first) : (map ("| " ++) rest)
             ) (init rst)
-         ++ let (first : rest) = last rst
-            in ("|-" ++ first) : (map ("  " ++) rest)
+             ++ let (first : rest) = last rst
+                in ("|-" ++ first) : (map ("  " ++) rest)
+
 
