@@ -18,20 +18,16 @@ run args = do
         tokens = tokenize code
 
     debug $ intercalate " " tokens ++ " <-- Tokens"
-    let ast_ = makeAst tokens
-        at_ = pr2Map makeAT ast_
-        code_ = prMap makeCode at_
 
-    case ast_ of
+    case makeAst tokens of
+        Err e -> hPutStrLn stderr $ "AST failed: " ++ e
         Ok ast -> do 
-                debug $ "Ast:\n" ++ show ast
-                debug $ "Ast:\n" ++ ( intercalate "\n" $ prettify ast )
-        Err e -> debug e
-
-    case at_ of
-        Ok at -> debug $ show at
-        Err e -> debug e
-
-    case code_ of
-        Ok code -> putStrLn $ intercalate "\n" code
-        Err err -> hPutStrLn stderr $ "Code couldn't compile! Error: " ++ err
+            debug $ "Ast raw: " ++ show ast
+            debug $ "Ast unparsed: " ++ unParse ast
+            debug $ "Ast ascii:\n" ++ ( intercalate "\n" $ indent $ prettify ast )
+            case makeAT ast of
+                Err e -> hPutStrLn stderr $ "AT failed: " ++ e
+                Ok at -> do
+                    debug $ "AT raw: " ++ show at
+                    debug $ "AT ascii:\n" ++ ( intercalate "\n" $ indent $ prettifyAT at )
+                    putStrLn $ intercalate "\n" $ defaultCode ++ makeCode at

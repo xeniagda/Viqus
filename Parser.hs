@@ -38,7 +38,7 @@ import Data.Char
 import Data.Maybe
 import Debug.Trace
 
-orderOfOperations = [[";"], ["="], ["==", "<", ">"], ["+", "-"], ["*", "/", "%"], ["^"]]
+orderOfOperations = [[";"], ["=", ":"], ["==", "<", ">"], ["+", "-"], ["*", "/", "%"], ["^"]]
 
 data TokenType
     = TSymbol
@@ -99,7 +99,7 @@ parseStr code =
 data Ast
     = Expr String
     | BinOp String Ast Ast
-    | FuncApplic Ast Ast
+    | FuncApplic Ast [Ast]
     | Block [Ast]
     deriving Show
 
@@ -136,7 +136,7 @@ makeAst tokens =
                                         fns = map (\(s, e) -> drop s $ take e tokens) ranges
                                         parsed = prCollect $ map makeAst fns
                                     in case parsed of
-                                        Ok args -> Ok $ foldl1 (FuncApplic) args
+                                        Ok (f:args) -> Ok $ FuncApplic f args
                                         Err e -> Err e
                             else Err $ "Welp, nothing: " ++ (show tokens)
         seps -> let seps_ = sort seps
@@ -162,11 +162,23 @@ prettify ast =
             case ast of
                 Expr e         -> ("Ex", e, [])
                 BinOp op e1 e2 -> ("Bn", show op, [e1, e2])
-                FuncApplic f a -> ("Fn", "", [f, a])
+                FuncApplic f a -> ("Fn", "", f : a)
                 Block as       -> ("Bl", "", as)
-    in (tx ++ " " ++ tok)
-     : concatMap (\lst ->
-        let lines = prettify lst
-        in ("|-" ++ head lines) : (map ("| " ++) $ tail lines))
-       rst
+    in case rst of
+        [] -> [tx ++ " " ++ tok]
+        rst -> 
+            (tx ++ " " ++ tok)
+          : concatMap (\lst ->
+                let (first : rest) = prettify lst
+                in ("|-" ++ first) : (map ("| " ++) rest)
+            ) (init rst)
+         ++ let (first : rest) = prettify $ last rst
+            in ("|-" ++ first) : (map ("  " ++) rest)
 
+unParse :: Ast -> String
+unParse tree =
+    case tree of
+        Expr st -> st
+        BinOp f x y -> paren (unParse x ++ f ++ unParse y)
+        FuncApplic f args -> unParse f ++ " " ++ (intercalate " " $ map unParse args)
+        Block lines -> intercalate "; " $ map unParse lines

@@ -50,3 +50,6 @@ mapInd f l = zipWith f l [0..]
 mapIndMaybe :: (a -> Int -> Maybe b) -> [a] -> [b]
 mapIndMaybe f l = mapMaybe (uncurry f) (zip l [0..])
 
+paren :: String -> String
+paren x = "(" ++ x ++ ")"
+
