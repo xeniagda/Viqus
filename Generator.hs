@@ -4,8 +4,8 @@
 module Generator where
 
 import Base
-import Parser
-import ActionTree
+import AST
+import AT
 
 import Data.List
 
@@ -17,7 +17,12 @@ defaultCode =
     , ATAssign (localFlag ++ "str") (AEExpr "str")
     , ATAssign (localFlag ++ "input") (AEExpr "input")
     , ATAssign (localFlag ++ "len") (AEExpr "len")
+    , ATAssign (localFlag ++ "not") (AEExpr "lambda x:not x")
     , ATAssign (localFlag ++ "at") (AEExpr "lambda x:lambda y:x[y]")
+    , ATAssign (localFlag ++ "slice") (AEExpr "lambda x:lambda y:lambda z:x[y:z]")
+
+    , ATAssign (localFlag ++ "True") (AEExpr "True")
+    , ATAssign (localFlag ++ "False") (AEExpr "False")
     ]
 
 makeCode :: AT -> [String] -- Ast to list of lines

@@ -1,6 +1,6 @@
 import Base
-import Parser
-import ActionTree
+import AST
+import AT
 import Generator
 
 import System.Environment
